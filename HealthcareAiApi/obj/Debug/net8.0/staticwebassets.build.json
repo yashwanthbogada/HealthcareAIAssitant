@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "7nvpfk+v2frupBl6MSUYBVneoY6LZD6ZAiCCApNxUsw=",
+  "Source": "HealthcareAiApi",
+  "BasePath": "_content/HealthcareAiApi",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
