@@ -1,0 +1,25 @@
+# .gitignore for .NET Core / Visual Studio
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Dd]iagnostics/
+[Ll]ogs/
+[Tt]emp/
+
+# Visual Studio user files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code specific files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Environment variables / User secrets
+.env
+appsettings.Development.json

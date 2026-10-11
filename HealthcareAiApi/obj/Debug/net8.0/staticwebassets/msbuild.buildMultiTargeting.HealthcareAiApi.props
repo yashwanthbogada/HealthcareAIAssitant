@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\HealthcareAiApi.props" />
-</Project>

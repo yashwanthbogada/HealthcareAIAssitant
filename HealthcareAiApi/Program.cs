@@ -1,3 +1,4 @@
+using HealthcareAiApi.Middleware;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using System.ClientModel;
@@ -9,10 +10,13 @@ builder.Services.AddChatClient(services =>
 {
     var endpoint = new Uri("http://localhost:11434/v1");
     var credential = new ApiKeyCredential("ollama"); // Dummy key for local Ollama
-    return new OpenAIClient(credential, new OpenAIClientOptions { Endpoint = endpoint })
-        .GetChatClient("phi4")
+    IChatClient baseClient= new OpenAIClient(credential, new OpenAIClientOptions { Endpoint = endpoint })
+        .GetChatClient("phi4-mini")
         .AsIChatClient();
  
+ // 2. Wrap it with our enterprise telemetry decorator and resolve the logger via service provider
+    var logger = services.GetRequiredService<ILogger<TelemetryChatClient>>();
+    return new TelemetryChatClient(baseClient, logger);
 });
 
 builder.Services.AddControllers();
