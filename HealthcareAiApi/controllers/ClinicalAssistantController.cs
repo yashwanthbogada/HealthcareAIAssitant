@@ -32,7 +32,7 @@ public class ClinicalAssistantController : ControllerBase
 
         return Ok(new ClinicalQueryResponse
         {
-            ModelUsed = "phi4-local",
+            ModelUsed = "phi4-mini",
             ResponseText = response.Text,
             Timestamp = DateTime.UtcNow
         });
@@ -79,7 +79,7 @@ public class ClinicalAssistantController : ControllerBase
 
         return Ok(new
         {
-            ModelUsed = "phi4-local",
+            ModelUsed = "phi4-mini",
             Data = response.Result,
             Timestamp = DateTime.UtcNow
         });

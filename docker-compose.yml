@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  healthcare-api:
+    build:
+      context: .
+      dockerfile: HealthcareAiApi/Dockerfile
+    ports:
+      - "5047:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - OllamaSettings__BaseUrl=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ai-network
+  healthcare-ui:
+    build:
+      context: ./HealthcareAIUI
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - healthcare-api
+    networks:
+      - ai-network
+networks:
+  ai-network:
+    driver: bridge

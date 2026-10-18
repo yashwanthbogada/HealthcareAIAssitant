@@ -13,7 +13,7 @@ async function handleSubmit() {
   result.value = null
 
   try {
-    const response = await fetch(`/api/ClinicalAssistant/${activeTab.value}`, {
+    const response = await fetch(`http://localhost:5047/api/ClinicalAssistant/${activeTab.value}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: prompt.value })

@@ -19,7 +19,7 @@ public class TelemetryChatClient : DelegatingChatClient
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var modelId = options?.ModelId ?? "phi4-mini-local";
+        var modelId = options?.ModelId ?? "phi4-mini";
 
         _logger.LogInformation("--> Starting AI request to model '{ModelId}'", modelId);
 
