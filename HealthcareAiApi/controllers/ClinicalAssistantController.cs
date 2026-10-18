@@ -48,7 +48,7 @@ public class ClinicalAssistantController : ControllerBase
         {
             yield break;
         }
-
+        Response.ContentType = "text/plain; charset=utf-8";
         var messages = new List<ChatMessage>
         {
             new ChatMessage(ChatRole.System, "You are a secure clinical operations assistant helping hospital staff summarize administrative and workflow documentation. Never provide direct medical diagnoses."),
@@ -60,7 +60,8 @@ public class ClinicalAssistantController : ControllerBase
         {
             if (!string.IsNullOrEmpty(update.Text))
             {
-                yield return update.Text;
+               await Response.WriteAsync(update.Text, cancellationToken);
+               await Response.Body.FlushAsync(cancellationToken);
             }
         }
     }
