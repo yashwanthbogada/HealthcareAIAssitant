@@ -1,4 +1,6 @@
+using HealthcareAiApi.Data;
 using HealthcareAiApi.Middleware;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using System.ClientModel;
@@ -20,6 +22,10 @@ builder.Services.AddChatClient(services =>
     var logger = services.GetRequiredService<ILogger<TelemetryChatClient>>();
     return new TelemetryChatClient(baseClient, logger);
 });
+// Add SQLite Database Context
+
+builder.Services.AddDbContext<ClinicalDbContext>(options =>
+    options.UseSqlite("Data Source=clinical_assistant.db"));
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -47,5 +53,9 @@ app.UseCors("AllowFrontend");
 
 app.UseAuthorization();
 app.MapControllers();
-
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ClinicalDbContext>();
+    dbContext.Database.EnsureCreated(); // Or dbContext.Database.Migrate();
+}
 app.Run();
