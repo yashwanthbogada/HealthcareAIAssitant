@@ -38,6 +38,30 @@ const handleSelectLog = (log) => {
     }
   }
 }
+
+const loadThreads = async () => {
+  const response = await fetch('http://localhost:5047/api/ClinicalAssistant/threads');
+  if (response.ok) {
+    sidebarThreads.value = await response.json();
+  }
+};
+const selectThread = async (threadId) => {
+  currentThreadId.value = threadId;
+  const response = await fetch(`http://localhost:5047/api/ClinicalAssistant/history/${threadId}`);
+  if (response.ok) {
+    const history = await response.json();
+    // Map history logs into your chat messages array
+    messages.value = history.map(h => ({
+      role: h.IsUser ? 'user' : 'assistant',
+      content: h.Query // or Response depending on your model schema
+    }));
+  }
+};
+
+const startNewThread = () => {
+  currentThreadId.value = crypto.randomUUID(); // Generate new session ID
+  messages.value = [{ role: 'assistant', content: 'Hello! I am your clinical operations assistant. How can I help you today?' }];
+};
 function clearChat() {
   chatMessages.value = [
     { role: 'assistant', content: 'Hello! I am your clinical operations assistant. How can I help you today?' }
@@ -69,6 +93,7 @@ async function handleChatSubmit() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        threadId: currentThreadId.value,
         messages: trimmedMessages.map(m => ({ role: m.role, content: m.content }))
       })
     });
