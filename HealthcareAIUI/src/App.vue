@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import HistorySidebar from './components/HistorySidebar.vue'
 
 const prompt = ref('Patient presents with acute chest pain and shortness of breath.')
 const activeTab = ref('structured')
@@ -7,6 +8,24 @@ const loading = ref(false)
 const result = ref(null)
 const streamingResult = ref('')
 const error = ref(null)
+const sidebarRef = ref(null)
+
+const handleSelectLog = (log) => {
+  prompt.value = log.prompt
+  activeTab.value = log.endpointType || 'query'
+  if (log.endpointType === 'stream') {
+    streamingResult.value = log.responseContent
+    result.value = null
+  } else {
+    try {
+      // Try to parse JSON if it's structured, otherwise show as raw text
+      result.value = JSON.parse(log.responseContent)
+    } catch {
+      result.value = { response: log.responseContent }
+    }
+    streamingResult.value = ''
+  }
+}
 
 async function handleSubmit() {
   loading.value = true
@@ -16,9 +35,8 @@ async function handleSubmit() {
 
   try {
     const endpoint = `http://localhost:5047/api/ClinicalAssistant/${activeTab.value}`
-
+    
     if (activeTab.value === 'stream') {
-      // Handle Streaming API Request
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,18 +44,16 @@ async function handleSubmit() {
       })
 
       if (!response.ok) throw new Error(`Server returned status ${response.status}`)
-
+      
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-
+      
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
         streamingResult.value += decoder.decode(value, { stream: true })
       }
-
     } else {
-      // Handle Standard & Structured JSON Requests
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,6 +64,11 @@ async function handleSubmit() {
       
       result.value = await response.json()
     }
+
+    // Refresh history sidebar with the newly saved item
+    if (sidebarRef.value) {
+      sidebarRef.value.fetchHistory()
+    }
   } catch (err) {
     error.value = err.message
   } finally {
@@ -57,74 +78,79 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="app-container">
-    <header class="header">
-      <h1>Healthcare AI Assistant Portal</h1>
-      <span class="badge">.NET 8 + Ollama (phi4-mini)</span>
-    </header>
+  <div class="app-layout">
+    <!-- History Sidebar Component -->
+    <HistorySidebar ref="sidebarRef" @select-log="handleSelectLog" />
 
-    <main class="card">
-      <div class="tabs">
-        <button 
-          :class="{ active: activeTab === 'structured' }" 
-          @click="activeTab = 'structured'"
-        >
-          Structured JSON Schema
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <header class="header">
+        <h1>Healthcare AI Assistant Portal</h1>
+        <span class="badge">.NET 8 + Ollama (phi4-mini)</span>
+      </header>
+
+      <div class="card">
+        <div class="tabs">
+          <button :class="{ active: activeTab === 'structured' }" @click="activeTab = 'structured'">
+            Structured JSON Schema
+          </button>
+          <button :class="{ active: activeTab === 'query' }" @click="activeTab = 'query'">
+            Standard Query
+          </button>
+          <button :class="{ active: activeTab === 'stream' }" @click="activeTab = 'stream'">
+            Real-Time Stream
+          </button>
+        </div>
+
+        <div class="input-group">
+          <label for="prompt">Clinical Scenario / Prompt</label>
+          <textarea 
+            id="prompt" 
+            v-model="prompt" 
+            rows="4" 
+            placeholder="Enter patient notes or symptoms..."
+          ></textarea>
+        </div>
+
+        <button class="submit-btn" @click="handleSubmit" :disabled="loading">
+          {{ loading ? 'Processing via Local AI...' : 'Generate Analysis' }}
         </button>
-        <button 
-          :class="{ active: activeTab === 'query' }" 
-          @click="activeTab = 'query'"
-        >
-          Standard Query
-        </button>
-        <button 
-          :class="{ active: activeTab === 'stream' }" 
-          @click="activeTab = 'stream'"
-        >
-          Real-Time Stream
-        </button>
-      </div>
 
-      <div class="input-group">
-        <label for="prompt">Clinical Scenario / Prompt</label>
-        <textarea 
-          id="prompt" 
-          v-model="prompt" 
-          rows="4" 
-          placeholder="Enter patient notes or symptoms..."
-        ></textarea>
-      </div>
+        <div v-if="error" class="error-box">
+          ⚠️ Error: {{ error }}
+        </div>
 
-      <button class="submit-btn" @click="handleSubmit" :disabled="loading">
-        {{ loading ? 'Processing via Local AI...' : 'Generate Analysis' }}
-      </button>
+        <!-- Output for Structured / Standard JSON -->
+        <div v-if="result && activeTab !== 'stream'" class="output-container">
+          <h3>Response Payload:</h3>
+          <pre>{{ JSON.stringify(result, null, 2) }}</pre>
+        </div>
 
-      <div v-if="error" class="error-box">
-        ⚠️ Error: {{ error }}
-      </div>
-
-      <!-- Output for Structured / Standard JSON -->
-      <div v-if="result && activeTab !== 'stream'" class="output-container">
-        <h3>Response Payload:</h3>
-        <pre>{{ JSON.stringify(result, null, 2) }}</pre>
-      </div>
-
-      <!-- Output for Real-Time Streaming -->
-      <div v-if="activeTab === 'stream' && (streamingResult || loading)" class="output-container">
-        <h3>Live Streaming Output:</h3>
-        <div class="stream-box">{{ streamingResult }}<span v-if="loading" class="cursor">_</span></div>
+        <!-- Output for Real-Time Streaming -->
+        <div v-if="activeTab === 'stream' && (streamingResult || loading)" class="output-container">
+          <h3>Live Streaming Output:</h3>
+          <div class="stream-box">{{ streamingResult }}<span v-if="loading" class="cursor">_</span></div>
+        </div>
       </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-.app-container {
-  max-width: 900px;
-  margin: 40px auto;
-  padding: 0 20px;
+.app-layout {
+  display: flex;
+  height: 100vh;
+  margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
   color: #1e293b;
+  background: #f1f5f9;
+  box-sizing: border-box;
+}
+
+.main-workspace {
+  flex-grow: 1;
+  padding: 30px;
+  overflow-y: auto;
 }
 
 .header {
@@ -137,6 +163,7 @@ async function handleSubmit() {
 .header h1 {
   font-size: 22px;
   color: #0f172a;
+  margin: 0;
 }
 
 .badge {
@@ -197,6 +224,7 @@ textarea {
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
+  resize: vertical;
 }
 
 .submit-btn {
