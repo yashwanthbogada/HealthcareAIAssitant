@@ -1,4 +1,5 @@
 using HealthcareAiApi.Data;
+using HealthcareAiApi.Mcp;
 using HealthcareAiApi.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -50,6 +51,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<KnowledgeRetrievalService>();
 builder.Services.AddScoped<VectorKnowledgeRetrievalService>();
+// Register your MCP service dependency
+builder.Services.AddScoped<HospitalMcpTools>();
 
 var app = builder.Build();
 

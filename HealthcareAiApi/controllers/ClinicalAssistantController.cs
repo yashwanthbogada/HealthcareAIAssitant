@@ -187,7 +187,7 @@ public class ClinicalAssistantController : ControllerBase
         var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
     
         // Retrieve relevant context from our local text files
-        //var retrievedKnowledge = _knowledgeRetrievalService.SearchRelevantContext(latestUserPrompt);
+        //var retrievedKnowledge = await _knowledgeRetrievalService.SearchRelevantContextAsync(latestUserPrompt);
 
          // Retrieve relevant context from our local text files using Vector revtrieval
         var retrievedKnowledge = _vectorRS.SearchRelevantContextAsync(latestUserPrompt);
