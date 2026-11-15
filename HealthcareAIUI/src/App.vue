@@ -1,33 +1,110 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
+import { marked } from 'marked'
 import HistorySidebar from './components/HistorySidebar.vue'
 
-const prompt = ref('Patient presents with acute chest pain and shortness of breath.')
-const activeTab = ref('structured')
+const activeTab = ref('chat') // Default to our new chat thread mode
+const prompt = ref('')
 const loading = ref(false)
 const result = ref(null)
 const streamingResult = ref('')
 const error = ref(null)
 const sidebarRef = ref(null)
 
+// Chat Thread State for multi-turn conversations
+const chatMessages = ref([
+  { role: 'assistant', content: 'Hello! I am your clinical operations assistant. How can I help you today?' }
+])
+const chatContainerRef = ref(null)
+const renderMarkdown = (content) => {
+  if (!content) return ''
+  return marked.parse(content)
+}
 const handleSelectLog = (log) => {
   prompt.value = log.prompt
-  activeTab.value = log.endpointType || 'query'
-  if (log.endpointType === 'stream') {
-    streamingResult.value = log.responseContent
-    result.value = null
+  if (log.endpointType === 'chat') {
+    activeTab.value = 'chat'
+    // Load log content into chat view
+    chatMessages.value = [
+      { role: 'user', content: log.prompt },
+      { role: 'assistant', content: log.responseContent }
+    ]
   } else {
+    activeTab.value = log.endpointType || 'query'
     try {
-      // Try to parse JSON if it's structured, otherwise show as raw text
       result.value = JSON.parse(log.responseContent)
     } catch {
       result.value = { response: log.responseContent }
     }
-    streamingResult.value = ''
+  }
+}
+function clearChat() {
+  chatMessages.value = [
+    { role: 'assistant', content: 'Hello! I am your clinical operations assistant. How can I help you today?' }
+  ]
+}
+async function handleChatSubmit() {
+  if (!prompt.value.trim() || loading.value) return
+
+  const userMsg = prompt.value
+  prompt.value = ''
+  error.value = null
+
+  // Append user message
+  chatMessages.value.push({ role: 'user', content: userMsg })
+  
+  // Append placeholder assistant message
+  const assistantMsgIndex = chatMessages.value.length
+  chatMessages.value.push({ role: 'assistant', content: '' })
+  
+  await scrollToBottom()
+  loading.value = true
+
+  try {
+   // Keep only the most recent messages to protect the model's context limit
+    const maxHistoryMessages = 8;
+    const trimmedMessages = chatMessages.value.slice(-maxHistoryMessages);
+
+    const response = await fetch('http://localhost:5047/api/ClinicalAssistant/chat-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: trimmedMessages.map(m => ({ role: m.role, content: m.content }))
+      })
+    });
+
+    if (!response.ok) throw new Error(`Server returned status ${response.status}`)
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value, { stream: true })
+      chatMessages.value[assistantMsgIndex].content += chunk
+      await scrollToBottom()
+    }
+    
+    if (sidebarRef.value) {
+      sidebarRef.value.fetchHistory()
+    }
+  } catch (err) {
+    error.value = err.message
+    // Remove the empty placeholder bubble if the request failed
+    chatMessages.value.splice(assistantMsgIndex, 1)
+  } finally {
+    loading.value = false
+    await scrollToBottom()
   }
 }
 
 async function handleSubmit() {
+  if (activeTab.value === 'chat') {
+    return handleChatSubmit()
+  }
+
   loading.value = true
   error.value = null
   result.value = null
@@ -65,7 +142,6 @@ async function handleSubmit() {
       result.value = await response.json()
     }
 
-    // Refresh history sidebar with the newly saved item
     if (sidebarRef.value) {
       sidebarRef.value.fetchHistory()
     }
@@ -73,6 +149,13 @@ async function handleSubmit() {
     error.value = err.message
   } finally {
     loading.value = false
+  }
+}
+
+async function scrollToBottom() {
+  await nextTick()
+  if (chatContainerRef.value) {
+    chatContainerRef.value.scrollTop = chatContainerRef.value.scrollHeight
   }
 }
 </script>
@@ -90,9 +173,15 @@ async function handleSubmit() {
       </header>
 
       <div class="card">
+        <div class="chat-header-actions">
+          <button class="clear-btn" @click="clearChat">🗑️ Clear Thread</button>
+        </div>
         <div class="tabs">
+          <button :class="{ active: activeTab === 'chat' }" @click="activeTab = 'chat'">
+            💬 Interactive Chat Agent
+          </button>
           <button :class="{ active: activeTab === 'structured' }" @click="activeTab = 'structured'">
-            Structured JSON Schema
+            Structured JSON
           </button>
           <button :class="{ active: activeTab === 'query' }" @click="activeTab = 'query'">
             Standard Query
@@ -102,26 +191,61 @@ async function handleSubmit() {
           </button>
         </div>
 
-        <div class="input-group">
-          <label for="prompt">Clinical Scenario / Prompt</label>
-          <textarea 
-            id="prompt" 
-            v-model="prompt" 
-            rows="4" 
-            placeholder="Enter patient notes or symptoms..."
-          ></textarea>
+        <!-- Chat Thread View -->
+        <div v-if="activeTab === 'chat'" class="chat-container">
+          <div ref="chatContainerRef" class="chat-messages">
+            <div 
+              v-for="(msg, index) in chatMessages" 
+              :key="index" 
+              :class="['chat-bubble', msg.role]"
+            >
+              <span class="role-label">{{ msg.role === 'user' ? 'You' : 'Assistant' }}</span>
+              <!-- Use v-html for assistant messages to render Markdown, keep text for user messages -->
+              <div v-if="msg.role === 'assistant'" class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <p v-else>{{ msg.content }}</p>
+            </div>
+            <!-- <div v-if="loading" class="chat-bubble assistant typing">
+              <span class="role-label">Assistant</span>
+              <p>Thinking...</p>
+            </div> -->
+          </div>
+
+          <div class="chat-input-area">
+            <textarea 
+              v-model="prompt" 
+              rows="2" 
+              placeholder="Ask a follow-up question..."
+              @keydown.enter.prevent="handleChatSubmit"
+            ></textarea>
+            <button class="submit-btn" @click="handleChatSubmit" :disabled="loading">
+              {{ loading ? 'Sending...' : 'Send' }}
+            </button>
+          </div>
         </div>
 
-        <button class="submit-btn" @click="handleSubmit" :disabled="loading">
-          {{ loading ? 'Processing via Local AI...' : 'Generate Analysis' }}
-        </button>
+        <!-- Single-turn Views -->
+        <div v-else>
+          <div class="input-group">
+            <label for="prompt">Clinical Scenario / Prompt</label>
+            <textarea 
+              id="prompt" 
+              v-model="prompt" 
+              rows="4" 
+              placeholder="Enter patient notes or symptoms..."
+            ></textarea>
+          </div>
+
+          <button class="submit-btn" @click="handleSubmit" :disabled="loading">
+            {{ loading ? 'Processing via Local AI...' : 'Generate Analysis' }}
+          </button>
+        </div>
 
         <div v-if="error" class="error-box">
           ⚠️ Error: {{ error }}
         </div>
 
         <!-- Output for Structured / Standard JSON -->
-        <div v-if="result && activeTab !== 'stream'" class="output-container">
+        <div v-if="result && activeTab !== 'stream' && activeTab !== 'chat'" class="output-container">
           <h3>Response Payload:</h3>
           <pre>{{ JSON.stringify(result, null, 2) }}</pre>
         </div>
@@ -151,6 +275,8 @@ async function handleSubmit() {
   flex-grow: 1;
   padding: 30px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .header {
@@ -181,6 +307,9 @@ async function handleSubmit() {
   border-radius: 12px;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
   border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
 }
 
 .tabs {
@@ -204,6 +333,81 @@ async function handleSubmit() {
   background: #2563eb;
   color: white;
   border-color: #2563eb;
+}
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  height: 60vh;
+}
+
+.chat-messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.chat-bubble {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.chat-bubble.user {
+  background: #dbeafe;
+  margin-left: auto;
+  text-align: right;
+}
+
+.chat-bubble.assistant {
+  background: white;
+  border: 1px solid #cbd5e1;
+  margin-right: auto;
+}
+
+.role-label {
+  display: block;
+  font-size: 11px;
+  font-weight: bold;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.chat-bubble p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.chat-input-area {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-area textarea {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: none;
+}
+
+.chat-input-area .submit-btn {
+  width: 100px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .input-group {
@@ -248,7 +452,7 @@ textarea {
 }
 
 .error-box {
-  margin-top: 20px;
+  margin-top: 10px;
   background: #fef2f2;
   color: #991b1b;
   padding: 12px;
@@ -295,5 +499,52 @@ pre {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* Markdown Styling inside Chat Bubbles */
+.markdown-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.markdown-body p {
+  margin: 0 0 8px 0;
+}
+
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body ul, .markdown-body ol {
+  margin: 4px 0 8px 20px;
+  padding: 0;
+}
+
+.markdown-body li {
+  margin-bottom: 4px;
+}
+
+.markdown-body code {
+  background: #f1f5f9;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.markdown-body pre {
+  background: #0f172a;
+  color: #38bdf8;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.markdown-body pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
 }
 </style>

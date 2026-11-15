@@ -129,7 +129,104 @@ public class ClinicalAssistantController : ControllerBase
         });
     }
 
+    [HttpPost("chat")]
+    public async Task<IActionResult> ChatWithContext([FromBody] ChatConversationRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Messages == null || request.Messages.Count == 0)
+        {
+            return BadRequest("Conversation messages cannot be empty.");
+        }
+
+        // Map incoming conversation DTOs to Microsoft.Extensions.AI ChatMessage objects
+        var chatMessages = new List<ChatMessage>
+        {
+            new ChatMessage(ChatRole.System, "You are a secure clinical operations assistant helping hospital staff summarize administrative and workflow documentation. Never provide direct medical diagnoses.")
+        };
+
+        foreach (var m in request.Messages)
+        {
+            chatMessages.Add(new ChatMessage(
+                m.Role.ToLower() == "assistant" ? ChatRole.Assistant : ChatRole.User,
+                m.Content
+            ));
+        }
+
+        // Call GetResponseAsync with the full message history
+        ChatResponse response = await _chatClient.GetResponseAsync(chatMessages, cancellationToken: cancellationToken);
+        var assistantReply = response.Text ?? string.Empty;
+
+        // Persist interaction to SQLite
+        var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
+        _context.ClinicalLogs.Add(new ClinicalLog {
+            Prompt = latestUserPrompt,
+            ResponseContent = assistantReply,
+            EndpointType = "chat"
+        });
+        await _context.SaveChangesAsync();
+
+        return Ok(new { response = assistantReply });
+    }
+  
+
+    [HttpPost("chat-stream")]
+    public async Task ChatStreamWithContext([FromBody] ChatConversationRequest request, CancellationToken cancellationToken)
+    {
+        Response.ContentType = "text/plain; charset=utf-8";
+
+        if (request.Messages == null || request.Messages.Count == 0)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            await Response.WriteAsync("Conversation messages cannot be empty.");
+            return;
+        }
+
+        // Map DTOs to ChatMessage objects with system context
+        var chatMessages = new List<ChatMessage>
+        {
+            new ChatMessage(ChatRole.System, "You are a secure clinical operations assistant helping hospital staff summarize administrative and workflow documentation. Never provide direct medical diagnoses.")
+        };
+
+        foreach (var m in request.Messages)
+        {
+            chatMessages.Add(new ChatMessage(
+                m.Role.ToLower() == "assistant" ? ChatRole.Assistant : ChatRole.User,
+                m.Content
+            ));
+        }
+
+        var fullResponseText = new System.Text.StringBuilder();
+
+        try
+        {
+            // Stream chunks from Ollama via Microsoft.Extensions.AI
+            await foreach (var update in _chatClient.GetStreamingResponseAsync(chatMessages, cancellationToken: cancellationToken))
+            {
+                if (!string.IsNullOrEmpty(update.Text))
+                {
+                    fullResponseText.Append(update.Text);
+                    await Response.WriteAsync(update.Text);
+                    await Response.Body.FlushAsync(cancellationToken);
+                }
+            }
+
+            // Log the complete interaction to SQLite once streaming finishes
+            var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
+            _context.ClinicalLogs.Add(new ClinicalLog {
+                Prompt = latestUserPrompt,
+                ResponseContent = fullResponseText.ToString(),
+                EndpointType = "chat"
+            });
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            // Handle stream interruption gracefully
+            Console.WriteLine($"Stream error: {ex.Message}");
+        }
+    }
+
 }
+
 public class ClinicalQueryRequest
 {
     [Required(ErrorMessage = "The prompt field is mandatory.")]
@@ -142,4 +239,14 @@ public class ClinicalQueryResponse
     public string ModelUsed { get; set; } = string.Empty;
     public string? ResponseText { get; set; }
     public DateTime Timestamp { get; set; }
+}
+public class ChatConversationRequest
+{
+    public List<ChatMessageDto> Messages { get; set; } = new();
+}
+
+public class ChatMessageDto
+{
+    public string Role { get; set; } = "user"; // "user" or "assistant"
+    public string Content { get; set; } = string.Empty;
 }

@@ -19,7 +19,7 @@
         class="history-item"
       >
         <div class="log-meta">
-          <span :class="['badge', log.endpointType]">{{ log.endpointType }}</span>
+          <span :class="['badge-tag', log.endpointType]">{{ log.endpointType }}</span>
           <span class="timestamp">{{ formatDate(log.timestamp) }}</span>
         </div>
         <p class="log-prompt">{{ log.prompt }}</p>
@@ -59,19 +59,18 @@ onMounted(() => {
   fetchHistory()
 })
 
-// Expose refresh so parent can trigger it after a new query
 defineExpose({ fetchHistory })
 </script>
 
 <style scoped>
 .history-sidebar {
-  width: 280px;
-  background: #f8f9fa;
-  border-right: 1px solid #dee2e6;
+  width: 300px;
+  background: #f8fafc;
+  border-right: 1px solid #cbd5e1;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 1rem;
+  padding: 16px;
   box-sizing: border-box;
 }
 
@@ -79,12 +78,12 @@ defineExpose({ fetchHistory })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }
 
 .sidebar-header h3 {
-  font-size: 1.1rem;
-  color: #333;
+  font-size: 16px;
+  color: #0f172a;
   margin: 0;
 }
 
@@ -92,7 +91,7 @@ defineExpose({ fetchHistory })
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 16px;
 }
 
 .history-list {
@@ -109,12 +108,12 @@ defineExpose({ fetchHistory })
   border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
-  border: 1px solid #e9ecef;
+  border: 1px solid #e2e8f0;
   transition: all 0.2s ease;
 }
 
 .history-item:hover {
-  border-color: #0d6efd;
+  border-color: #2563eb;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
@@ -125,26 +124,27 @@ defineExpose({ fetchHistory })
   margin-bottom: 4px;
 }
 
-.badge {
-  font-size: 0.7rem;
+.badge-tag {
+  font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
   text-transform: uppercase;
   font-weight: bold;
 }
 
-.badge.query { background: #cfe2ff; color: #084298; }
-.badge.structured { background: #d1e7dd; color: #0f5132; }
-.badge.stream { background: #fff3cd; color: #664d03; }
+.badge-tag.query { background: #e0f2fe; color: #0369a1; }
+.badge-tag.structured { background: #d1e7dd; color: #0f5132; }
+.badge-tag.stream { background: #fff3cd; color: #664d03; }
+.badge-tag.chat { background: #ede9fe; color: #6d28d9; }
 
 .timestamp {
-  font-size: 0.75rem;
-  color: #6c757d;
+  font-size: 11px;
+  color: #64748b;
 }
 
 .log-prompt {
-  font-size: 0.85rem;
-  color: #495057;
+  font-size: 13px;
+  color: #334155;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -152,8 +152,8 @@ defineExpose({ fetchHistory })
 }
 
 .loading-text, .empty-text {
-  font-size: 0.85rem;
-  color: #6c757d;
+  font-size: 13px;
+  color: #64748b;
   text-align: center;
   margin-top: 2rem;
 }
