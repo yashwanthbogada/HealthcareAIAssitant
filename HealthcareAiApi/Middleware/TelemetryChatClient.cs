@@ -7,34 +7,43 @@ public class TelemetryChatClient : DelegatingChatClient
 {
     private readonly ILogger<TelemetryChatClient> _logger;
 
-    public TelemetryChatClient(IChatClient innerClient, ILogger<TelemetryChatClient> logger) 
-        : base(innerClient)
+    public TelemetryChatClient(IChatClient innerClient, ILogger<TelemetryChatClient> logger) : base(innerClient)
     {
         _logger = logger;
     }
 
-    public override async Task<ChatResponse> GetResponseAsync(
-        IEnumerable<ChatMessage> messages, 
-        ChatOptions? options = null, 
-        CancellationToken cancellationToken = default)
+    public override async Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var modelId = options?.ModelId ?? "phi4-mini";
-
+        
         _logger.LogInformation("--> Starting AI request to model '{ModelId}'", modelId);
-
+        
         try
         {
             // Forward the call down the pipeline to the actual Ollama client
             var response = await base.GetResponseAsync(messages, options, cancellationToken);
-            
             stopwatch.Stop();
-            
-            // Log enterprise telemetry metrics
-            _logger.LogInformation(
-                "<-- AI request completed successfully in {ElapsedMilliseconds}ms. Finish reason: {FinishReason}", 
-                stopwatch.ElapsedMilliseconds, 
-                response.FinishReason);
+
+            // Extract and log token usage details if available
+            var usage = response.Usage;
+            if (usage != null)
+            {
+                _logger.LogInformation(
+                    "<-- AI request completed successfully in {ElapsedMilliseconds}ms. Finish reason: {FinishReason} | Tokens - Prompt: {PromptTokens}, Completion: {CompletionTokens}, Total: {TotalTokens}",
+                    stopwatch.ElapsedMilliseconds, 
+                    response.FinishReason,
+                    usage.InputTokenCount,
+                    usage.OutputTokenCount,
+                    usage.TotalTokenCount);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "<-- AI request completed successfully in {ElapsedMilliseconds}ms. Finish reason: {FinishReason}", 
+                    stopwatch.ElapsedMilliseconds, 
+                    response.FinishReason);
+            }
 
             return response;
         }
@@ -45,4 +54,5 @@ public class TelemetryChatClient : DelegatingChatClient
             throw;
         }
     }
+    
 }
