@@ -10,6 +10,7 @@ const result = ref(null)
 const streamingResult = ref('')
 const error = ref(null)
 const sidebarRef = ref(null)
+const currentThreadId = ref(null)
 
 // Chat Thread State for multi-turn conversations
 const chatMessages = ref([
