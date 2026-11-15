@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 using HealthcareAiApi.Models;
 using HealthcareAiApi.Data;
 using Microsoft.EntityFrameworkCore;
+using HealthcareAiApi.Middleware;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -12,10 +13,12 @@ public class ClinicalAssistantController : ControllerBase
 {
     private readonly IChatClient _chatClient;
     private readonly ClinicalDbContext _context;
-    public ClinicalAssistantController(IChatClient chatClient, ClinicalDbContext context)
+    private readonly KnowledgeRetrievalService _knowledgeRetrievalService;
+    public ClinicalAssistantController(IChatClient chatClient, ClinicalDbContext context, KnowledgeRetrievalService retrievalService)
     {
         _chatClient = chatClient;
         _context= context;
+        _knowledgeRetrievalService= retrievalService;
     }
     
     [HttpGet("history")]
@@ -179,11 +182,15 @@ public class ClinicalAssistantController : ControllerBase
             await Response.WriteAsync("Conversation messages cannot be empty.");
             return;
         }
-
+        var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
+    
+        // Retrieve relevant context from our local text files
+        var retrievedKnowledge = _knowledgeRetrievalService.SearchRelevantContext(latestUserPrompt);
         // Map DTOs to ChatMessage objects with system context
         var chatMessages = new List<ChatMessage>
         {
-            new ChatMessage(ChatRole.System, "You are a secure clinical operations assistant helping hospital staff summarize administrative and workflow documentation. Never provide direct medical diagnoses.")
+            new ChatMessage(ChatRole.System, 
+                $"You are a secure clinical operations assistant. Use the following internal hospital policy context if relevant to the user's question:\n\n{retrievedKnowledge}")
         };
 
         foreach (var m in request.Messages)
@@ -210,9 +217,9 @@ public class ClinicalAssistantController : ControllerBase
             }
 
             // Log the complete interaction to SQLite once streaming finishes
-            var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
+            var latestUserPrompt1 = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
             _context.ClinicalLogs.Add(new ClinicalLog {
-                Prompt = latestUserPrompt,
+                Prompt = latestUserPrompt1,
                 ResponseContent = fullResponseText.ToString(),
                 EndpointType = "chat"
             });
@@ -225,6 +232,35 @@ public class ClinicalAssistantController : ControllerBase
         }
     }
 
+    // GET: api/ClinicalAssistant/threads
+    [HttpGet("threads")]
+    public async Task<IActionResult> GetThreads()
+    {
+        var threads = await _context.ClinicalLogs
+            .GroupBy(l => l.ThreadId)
+            .Select(g => new 
+            {
+                ThreadId = g.Key,
+                LastMessage = g.OrderByDescending(l => l.Timestamp).Select(l => l.Prompt).FirstOrDefault(),
+                Timestamp = g.Max(l => l.Timestamp)
+            })
+            .OrderByDescending(t => t.Timestamp)
+            .ToListAsync();
+
+        return Ok(threads);
+    }
+
+    // GET: api/ClinicalAssistant/thread/{threadId}
+    [HttpGet("thread/{threadId}")]
+    public async Task<IActionResult> GetThreadMessages(string threadId)
+    {
+        var messages = await _context.ClinicalLogs
+            .Where(l => l.ThreadId == threadId)
+            .OrderBy(l => l.Timestamp)
+            .ToListAsync();
+
+        return Ok(messages);
+    }
 }
 
 public class ClinicalQueryRequest

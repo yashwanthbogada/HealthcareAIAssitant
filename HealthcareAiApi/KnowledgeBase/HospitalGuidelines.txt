@@ -1,0 +1,7 @@
+[Policy ID: HOP-101]
+Title: Triage and Diagnostic Priorities for Respiratory Illnesses
+Content: For patients presenting with suspected community-acquired pneumonia (CAP), priority clinical actions include: 1) Obtaining vital signs and pulse oximetry, 2) Ordering an immediate upright chest X-ray to evaluate infiltrates, and 3) Collecting sputum samples for Gram stain and culture before administering broad-spectrum antibiotics.
+
+[Policy ID: HOP-102]
+Title: Secure Messaging and Patient Data Handling
+Content: All hospital staff must use encrypted internal channels when discussing patient medical histories. Direct clinical diagnoses must never be delivered through unverified or consumer-grade chat interfaces.
