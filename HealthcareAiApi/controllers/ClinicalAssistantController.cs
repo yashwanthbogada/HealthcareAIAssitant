@@ -14,11 +14,13 @@ public class ClinicalAssistantController : ControllerBase
     private readonly IChatClient _chatClient;
     private readonly ClinicalDbContext _context;
     private readonly KnowledgeRetrievalService _knowledgeRetrievalService;
-    public ClinicalAssistantController(IChatClient chatClient, ClinicalDbContext context, KnowledgeRetrievalService retrievalService)
+    private readonly VectorKnowledgeRetrievalService _vectorRS;
+    public ClinicalAssistantController(IChatClient chatClient, ClinicalDbContext context, KnowledgeRetrievalService retrievalService, VectorKnowledgeRetrievalService vectorKnowledgeRetrieval)
     {
         _chatClient = chatClient;
         _context= context;
         _knowledgeRetrievalService= retrievalService;
+        _vectorRS= vectorKnowledgeRetrieval;
     }
     
     [HttpGet("history")]
@@ -185,7 +187,10 @@ public class ClinicalAssistantController : ControllerBase
         var latestUserPrompt = request.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ?? "";
     
         // Retrieve relevant context from our local text files
-        var retrievedKnowledge = _knowledgeRetrievalService.SearchRelevantContext(latestUserPrompt);
+        //var retrievedKnowledge = _knowledgeRetrievalService.SearchRelevantContext(latestUserPrompt);
+
+         // Retrieve relevant context from our local text files using Vector revtrieval
+        var retrievedKnowledge = _vectorRS.SearchRelevantContextAsync(latestUserPrompt);
         // Map DTOs to ChatMessage objects with system context
         var chatMessages = new List<ChatMessage>
         {
@@ -234,19 +239,15 @@ public class ClinicalAssistantController : ControllerBase
 
     // GET: api/ClinicalAssistant/threads
     [HttpGet("threads")]
-    public async Task<IActionResult> GetThreads()
+    public async Task<IActionResult> GetChatThreads()
     {
-        var threads = await _context.ClinicalLogs
-            .GroupBy(l => l.ThreadId)
-            .Select(g => new 
-            {
-                ThreadId = g.Key,
-                LastMessage = g.OrderByDescending(l => l.Timestamp).Select(l => l.Prompt).FirstOrDefault(),
-                Timestamp = g.Max(l => l.Timestamp)
-            })
-            .OrderByDescending(t => t.Timestamp)
-            .ToListAsync();
-
+       var threads = await _context.ClinicalLogs
+        .Where(l => !string.IsNullOrEmpty(l.ThreadId))
+        .OrderByDescending(l => l.Timestamp)
+        .Select(l => l.ThreadId)
+        .Distinct()
+        .Take(10)
+        .ToListAsync();
         return Ok(threads);
     }
 

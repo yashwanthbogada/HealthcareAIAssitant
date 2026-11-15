@@ -22,6 +22,15 @@ builder.Services.AddChatClient(services =>
     var logger = services.GetRequiredService<ILogger<TelemetryChatClient>>();
     return new TelemetryChatClient(baseClient, logger);
 });
+builder.Services.AddEmbeddingGenerator(services =>
+{
+    var credential = new ApiKeyCredential("ollama"); // Dummy key for local Ollama
+    // Use the OpenAI client to get the embedding client and wrap it as IEmbeddingGenerator
+    return new OpenAIClient(credential, new OpenAIClientOptions { Endpoint = endpointUri })
+        .GetEmbeddingClient("phi4-mini:latest") // Or your preferred local embedding model in Ollama
+        .AsIEmbeddingGenerator();
+});
+
 // Add SQLite Database Context
 
 builder.Services.AddDbContext<ClinicalDbContext>(options =>
@@ -40,6 +49,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<KnowledgeRetrievalService>();
+builder.Services.AddScoped<VectorKnowledgeRetrievalService>();
 
 var app = builder.Build();
 
